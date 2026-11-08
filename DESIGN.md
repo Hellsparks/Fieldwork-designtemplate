@@ -119,7 +119,7 @@ Panels and section frames have square corners. Controls have 2px radii; status p
 - **Panel**: title, body, optional footer action; 24px padding and structural border, no redundant nested rounded cards.
 - **Table / list**: 12px mono headers, 14px cells, 56px minimum row height; left-align text, right-align numbers. Status has text. Whole row is not clickable if it contains actions. Sort buttons must state direction; do not imply sorting without implementing it.
 - **Alert**: icon or short status word, concise message, optional recovery action. role=alert only for urgent errors; role=status for nonblocking updates. Toasts never replace actual state mutation.
-- **Dialog**: native dialog.showModal(), named heading, visible close, Escape, focus containment and restoration. Not implemented in the reference because no modal task is required; apply this contract when added.
+- **Dialog**: native dialog.showModal(), named heading, visible close, Escape, focus containment and restoration. `MotionModals` demonstrates settings validation and a reversible archive action. See modal contracts below.
 - **Tooltip / popover**: supplemental content only, available on keyboard focus, Escape dismisses; never put essential instructions in hover-only content.
 - **Progress / loading**: aria-busy for actual waiting, determinate progress where known. Skeletons mirror the final layout, are aria-hidden, and avoid flashing. No artificial loading delays.
 
@@ -226,3 +226,115 @@ The live **Interactive controls** section and portable `.fw-*` classes extend th
 Disabled controls use native disabled, neutral fill, dashed boundaries where relevant, muted labels, and a visible reason; never merely dim an important label. Do not hide disabled-only help in tooltips. Keep on/off labels readable in monochrome Foundry. Use `.fw-control-copy` for label/help and `.fw-state` for supplemental state text. Native input checked state remains the assistive-technology source of truth. Pointer hover never changes selection; keyboard focus is visibly outlined with 4px offset. Switch thumb motion is 120ms and removed under reduced motion.
 
 The reference contains six control families plus a dependent live configuration summary and reset action. A future application must wire actual task behavior and persistence separately. React implementations are readable examples in App.jsx; tokens.css supplies dependency-free styles rather than a packaged component runtime.
+
+
+## Motion and navigation patterns
+
+Motion clarifies spatial relationships and state changes; it is not an identity effect. Use the same motion language in every scheme and mode. No looping decoration, overshoot, elastic easing, or staggered navigation delays.
+
+### Motion tokens
+
+| Token | Default | Use |
+|---|---|---|
+| `--fw-duration-fast` | 120ms | Hover and label feedback; existing token |
+| `--fw-duration-normal` | 180ms | Popover and panel arrival; existing token |
+| `--fw-duration-expand` | 240ms | Sidebar and disclosure expansion |
+| `--fw-ease-standard` | cubic-bezier(.2,0,0,1) | Quick response, gentle settling |
+| `--fw-motion-offset` | 8px | Maximum content arrival offset |
+
+Use targeted transitions, not `transition: all`. Prefer opacity and transform for arrivals. Width and grid-row transitions are intentional exceptions for small, bounded layout regions. Avoid translating large workspaces. Content is available immediately; no delayed pointer events or focus waiting for animation. Exit for lightweight popovers is immediate to simplify safe dismissal and focus restoration.
+
+### Collapsible sidebar
+
+`.fw-sidebar[data-expanded=true|false]` transitions between 176px and 56px. This reference uses a 148px expanded rail on narrow viewports; consuming apps may override width for their content. A persistent button has an accessible name, `aria-expanded`, and `aria-controls` pointing to its navigation container. Labels use `.fw-nav-label`; collapsing fades them but never removes accessible names from icon buttons. Mark the active destination with `aria-current="page"`, plus a highlighted surface. Keep the same buttons mounted so focus, selection, and workspace state survive collapse. Hide no primary destination. In real apps, use route links rather than the reference's local sample buttons. This is an inline rail, not a modal mobile drawer.
+
+### Dropdown disclosure
+
+The trigger controls a positioned `.fw-popover` containing labelled native buttons. Use `aria-expanded` and `aria-controls`. This is a disclosure with a named group, not an ARIA menu: Tab reaches each action in document order; there is no menu-arrow-key promise. Selection updates shared state, dismisses the surface, and restores trigger focus. Escape dismisses and restores focus. Pointer interaction outside and focus leaving the group dismiss without stealing focus. Keep the positioning wrapper `position:relative`; constrain placement to the viewport in consuming apps. On removal, do not animate a focused element out of the DOM.
+
+### Accordion
+
+Use a button within a heading with `aria-expanded` and `aria-controls`. `FluidCollapse` measures its single direct content wrapper with ResizeObserver and sets `--fw-collapse-height` in pixels. The `.fw-collapse` container transitions height between 0 and that value; the flow-root child remains mounted and measurable. Keep padding inside the child, never on the collapsing container. This moves following content continuously, supports changing text and reversals, and avoids arbitrary max-height timing. Disclosure duration is 1.333 × `--fw-duration-expand` (320ms default); the existing 240ms expansion preference stays unchanged for the sidebar. Without a measured variable the CSS falls back to auto height, which is functional but not animated. The reference allows one open item, including none. Closed panels are inert and `aria-hidden`; do not leave hidden controls tabbable. If an external action closes a focused panel, move focus to its header first. A `.fw-chevron` rotates 90 degrees to supplement the expanded state.
+
+### Tabs
+
+`.fw-tabs` contains `role=tab` buttons inside a named `role=tablist`. Exactly one tab has `aria-selected=true` and `tabIndex=0`; others use -1. Left/Right wrap through tabs, Home/End select first/last. Each tab has `aria-controls` for its panel; panels use `role=tabpanel`, `aria-labelledby`, and a focusable entry point when appropriate. Inactive panels are hidden. Apply `.fw-tab-panel` to the newly visible content for one short arrival; do not animate the tab labels or delay selection. Keep business state outside temporary panel content.
+
+### Reduced motion and reuse
+
+`prefers-reduced-motion: reduce` removes all new pattern transitions and animations. The optional `.fw-motion[data-reduced=true]` wrapper provides an additional opt-out, never an override of the operating system. Layout and interaction outcomes are identical without animation. The reference has a reduce-motion switch and a source-backed expansion-duration control (120–400ms, 240ms default); this is a preview preference, not persistence. The fixed sample annotations describe default timings. Do not add localStorage for motion preferences without user intent.
+
+Portable visual primitives live in `tokens.css`; state, focus, outside dismissal, keyboard handlers, and inert/hidden attributes must be wired by consuming components. Working React examples are `MotionSidebar`, `MotionDropdown`, `MotionAccordion`, `MotionTabs`, and `MotionSection` in `App.jsx`. CSS alone is not a complete accessible component. Verify rapid toggling, long content, keyboard operation, both motion settings, all relevant schemes, and narrow widths in the destination app.
+
+
+### Modal dialogs
+
+Use `.fw-dialog` on a native `<dialog>` opened with `showModal()`, never a manually positioned imitation. Maximum width 520px, 16px minimum viewport gutter, maximum height viewport minus 48px, internal scrolling, raised fill, muted boundary, square corners and scheme-aware scrim. Arrival uses 180ms opacity/8px translation; closing is immediate so focus restoration never waits for animation. No backdrop dismissal for forms or destructive confirmations; Escape, Close and Cancel remain available.
+
+Name via `aria-labelledby`, describe via `aria-describedby`. Initial focus goes to the editable field for settings and Cancel for destructive confirmation. Native modal behavior contains keyboard focus and makes the background inert. Restore focus to the opener on every close; keep that opener mounted through state changes. Validation preserves input, explains the fix and focuses the invalid field. Cancel/Escape discard the draft; Save updates shared local state. Archive changes the visible record state and offers Restore, rather than substituting a toast for mutation. Do not stack dialogs. Operating-system and demo reduced-motion preferences remove arrival motion. `MotionModals` is the reusable state/focus example; no persistence or service integration is implied.
+
+
+### Contextual popups and notifications (v0.6)
+
+Use `MotionPopups` as the state and keyboard reference. Use a modal only when a task must block the rest of the interface. Do not use popup windows or browser alerts for product UI.
+
+- **Info popover** (`.fw-info-popup`): nonmodal `role=dialog`, labelled heading, `aria-haspopup=dialog`, `aria-expanded` and `aria-controls` on the trigger. Trigger click opens it and focuses its close action. Escape or explicit close returns focus to the trigger. Outside pointer or focus departure closes without stealing focus from the next task. No focus trap, no scrim. Reference positions above the trigger within a padded demo; for arbitrary viewport edges/scroll containers, add collision detection or a top-layer positioning solution before reuse. Do not assume this local anchor implementation handles every layout.
+- **Tooltip** (`.fw-tooltip`): short supplemental text only, no links or controls. Visible on hover and trigger focus, associated through `aria-describedby`; Escape dismisses without moving focus. Pointer can cross the 8px gap within a 120ms grace period and remain over the text. Essential instructions remain visible elsewhere; touch users do not depend on hover.
+- **Notification** (`.fw-toast`, `.fw-toast-stack`): neutral informational foreground with semantic info boundary, never decorative accent as a success signal. Arrival 180ms; no repeating animation. Reference renders an inline preview rather than a fixed viewport overlay. Up to two notices with stable IDs and duplicate prevention. They do not auto-dismiss, move focus on arrival, or interrupt speech; announce new content through a separate persistent polite live region. Explicit Dismiss and Undo return focus to the corresponding trigger after it is enabled again. Undo changes the shared sample queue state, not just the notice. Dismissing a notification does not undo its action.
+
+Popup surfaces use raised fill, muted boundary, overlay shadow, square corners and theme-aware text. Respect system reduced motion and the reference's existing manual override. Keep scope and positions local unless the consuming app explicitly provides an overlay layer. See `examples/toast-starter.jsx` for the unthemed scaffold provenance only; use `MotionPopups` and tokens.css for Fieldwork adoption.
+
+
+## Reference navigation and spatial explorer
+
+The living reference is one continuous document, not a set of mutually exclusive screens. Sidebar section links scroll to real IDs, move focus without a second scroll, and indicate the section reached. Do not mark individual reference sections with screen-switching metadata that hides them. Internal product examples keep their own independent state. The reference's click interception is a local preview-shell accommodation; consuming apps should use their router or ordinary section navigation as appropriate.
+
+**Spatial explorer** is an opt-in component pattern (`.fw-browser`, `.fw-file-card`, `.fw-file-inspector`) using the existing semantic colors in every scheme/mode. Dimensional folder fronts use `--fw-spatial-depth:22px` and `--fw-spatial-tilt:-12deg`; edges use muted ink, while the front lip uses the active control color. Spatial treatment is decorative: filenames, types, item counts, and navigation remain plain inspectable text. `data-view="flat"` removes depth without changing records, location, or selection. System reduced motion removes transformations and transitions. Hover lift is subtle and never required for discovery.
+
+Folder activation is a single click or native button keyboard activation. Supply back/forward history, parent navigation, location shortcuts, and breadcrumbs. Search is explicitly scoped to the current folder; navigation clears the search. Opening another folder closes the file inspector. Empty folders and empty search results offer different recovery actions. Share one record collection across grids, breadcrumbs, counts, previews, rename, and star actions. Theme changes and reference navigation must preserve that collection and browser state.
+
+The non-modal file inspector uses an aside with a heading, focuses that heading on opening, and returns focus to the file card on close. Do not trap focus in it. Folder creation and file rename are inline forms; reject empty names, slashes, and sibling name collisions without discarding the input. Announce successful changes through a polite status region. Keep 44px action targets and visible keyboard focus. At narrow widths, location shortcuts become a horizontal strip and the file grid becomes two columns.
+
+The sample supports nested browsing, search, 3D/flat views, preview, file rename/star, and folder creation. It does not read a disk, upload files, or persist changes after reload. Those integrations need separate authorization and implementation; the sample label must remain visible until real services exist. App.jsx includes `initialFiles`, `FileArt`, and `SpatialFileBrowser` as reference implementations; `FileBrowser` composes the model viewer with this optional browser example. Portable explorer styles live in tokens.css; the section-navigation styles are local to the reference app.
+
+
+## Local 3D model viewer
+
+The system-index destination **3D model viewer** (`files`) leads to the mesh inspector, not the spatial folder pattern. `ModelViewer` is the reusable reference; `SpatialFileBrowser` remains in a related-pattern disclosure with its own `spatial-files` ID. Index navigation expands collapsed ancestors, focuses destinations without native focus scrolling, and aligns them beneath the header. Scrollspy excludes collapsed groups and matches the landing offset; navigation does not reset domain state.
+
+Use existing background/surface/raised, border, muted, accent, danger/background, and focus semantic tokens. Keep the viewport square-edged and grid subdued. Mesh colors follow the selected scheme/mode; there are no new palette values. Portable `.fw-model-*` structural styles are in tokens.css; App.jsx includes the equivalent local rendering styles. Native buttons and the file chooser remain labelled. Wireframe is a pressed-state button. Canvas is keyboard-focusable and named with instructions: arrows orbit, + / − zoom, Home resets. A labelled native range exposes 50–200% zoom. No automated animation is introduced.
+
+The local geometry decoder accepts OBJ polygon faces (triangulated) and ASCII/binary STL; it normalizes the largest extent for fit-to-view. Limits are 10 MB / 40,000 triangles. Display actionable errors while preserving the current model. Model name, triangle count, and rendering mode are visible and announced. Files remain in memory, never uploaded, and reset on reload. Materials, textures, GLB/glTF, measurements, and backend storage are outside this lightweight reference. Canvas rendering is depth-sorted software projection, not a production CAD renderer.
+
+The related browser exposes a visible location heading rather than a focusable clipped heading. The folder search has a visible compact label in addition to its placeholder. Reference form notification checkboxes use 24px marks within their labelled rows. Disclosure titles can wrap instead of overflowing. These are refinements of existing contracts, not new visual tokens.
+
+
+## Hierarchical system index
+
+`SystemIndex` extends the existing continuous-document index with optional child destinations. Parent links navigate; separate, labelled disclosure buttons expand the child list with `aria-expanded` and `aria-controls`. Child links are real anchors, marked with `aria-current="location"` when active. Opening a child opens its containing index group and any collapsed content ancestor without resetting product state. Parent active markers identify the current group; child background and text identify the exact destination. The desktop rail scrolls independently when necessary. Preserve native link and keyboard behavior; do not simulate an ARIA tree or menu with incomplete keyboard support.
+
+## Model-viewer range consistency
+
+Zoom uses the shared `.fw-range` primitive, not browser-default range styling. Set `--fw-range-fill` to `(value - min) / (max - min) * 100%`, retain the labelled native input and visible percentage output. The viewer's current 50–200% bounds mean 100% fills one third of the track. Reset updates both the output and fill from the same value. Native keyboard behavior remains intact.
+
+## Standalone application window
+
+`ApplicationWindow` is a local reference implementation; `.fw-window*` primitives are portable in `tokens.css`. One title-bar row contains, in order, File, Options, and Help disclosure menus, the document name, then labelled minimize, maximize/restore, and close controls on the right. Menus must not occupy a second toolbar row. On narrow screens the document title reduces to an application glyph with its full title available as a tooltip, keeping menus and window controls reachable on one line. The content area includes a document surface and a live status line. Menus remain available while minimized; activating a command restores the content area. Square boundaries and semantic scheme tokens apply in all four schemes and both modes; no OS-specific brand assets or literal scheme colors are introduced.
+
+Menus use native buttons and labelled command groups, not an incomplete `menubar` role: Tab traverses commands, Enter/Space activates, Escape dismisses and returns focus. Click-away and focus-away dismiss. Commands perform local state changes: New/Open sample changes the shared document, Options toggles the construction grid or resets layout, Help opens inline guidance with a return action. Minimize retains a restore button; maximize expands the example within the page; close offers Reopen and preserves the document. Restore and reopen retain keyboard access and return focus. These controls do not manipulate the actual OS window or access the disk. File uploads remain in the separate model viewer.
+
+Reference dependencies: `ApplicationWindow` uses `SectionHeading` and the existing button primitives. For an actual desktop app, adapt the same view/controller contracts to an explicitly authorized native shell. No native integration, saving, or persistence is provided here.
+
+
+
+## Phone application reference
+
+`PhoneApplication` in `App.jsx` demonstrates **Fieldwork Inspect**, an original, local field-inspection app. Reach it from System index → Phone application, with real child destinations `phone-demo` and `phone-patterns`. Preserve the desktop reference and window example; phone chrome does not inherit File/Options/Help menus or simulated OS controls.
+
+- Composition: a 430px maximum working surface, structural header, independently scrolling content area, and four always-reachable bottom navigation buttons. Use Work, Models, Activity, Settings with text labels and an explicit current marker. Do not scale desktop layouts into the phone.
+- Shared records: work-order search, Open/Done/All filters, counts, details, three inspection checks, editable notes, completion/reopening, and activity use the same in-memory records. Complete only after all three checks; Activity can undo completion. Preserve filters, search, selected order, notes, and viewer settings across tab and appearance changes.
+- Creation: labelled work-order name, location, and priority in a named native dialog; validate without clearing inputs, support Escape, and return focus to the opener on cancellation or the new record heading on success. No account, persistence, sync, or push notifications are implied.
+- Model viewer: reuse `ModelViewer` with a unique `idPrefix`. Keep all input/label/output IDs unique when multiple viewers appear on the reference page. Reuse `.fw-range` and its actual-value fill; local OBJ/STL limits and sample-geometry labels remain unchanged.
+- Appearance: scheme/mode selectors drive the reference's existing four schemes and two modes, not a second palette. In-app action messages are optional; Activity remains the durable-in-session change list regardless of this setting.
+- Components: `fw-phone-*` styles in `phoneStyles` are app-local composition examples, not additions to the portable primitive API in `tokens.css`. They consume existing semantic color, spacing, typography, radius, focus, and status tokens; no new palette is introduced. Retain native input semantics and 44px minimum action targets.
+- Scope: sample data only; all work resets on reload. Geometry is illustrative rather than a verified attachment to an order. Mobile file picking and gesture operation require manual target-device verification.
